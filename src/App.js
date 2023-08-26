@@ -1,68 +1,58 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
-import Input from "./components/Input";
 import Messages from "./components/Messages";
+import Input from "./components/Input";
 import randomName from "./components/randomUser/randomName";
-import getRandomColor from "./components/randomUser/getRandomColor";
-import Scaledrone from "scaledrone-react";
+import randomColor from "./components/randomUser/getRandomColor";
 
 const App = () => {
   const [messages, setMessages] = useState([]);
-  const [username] = useState(randomName());
-  const [color] = useState(getRandomColor());
-  const [drone, setDrone] = useState(null);
+  const [member, setMember] = useState({
+    username: randomName(),
+    color: randomColor(),
+  });
+
+  const [drone, setDrone] = useState();
 
   useEffect(() => {
-    const scaledrone = new Scaledrone(process.env.REACT_APP_CHANNEL_ID);
-
-    scaledrone.on("open", (error) => {
-      if (error) {
-        console.error(error);
-      } else {
-        console.log("Connected to Scaledrone");
-        const room = scaledrone.subscribe(process.env.REACT_APP_ROOM);
-
-        room.on("data", (data, member) => {
-          handleMessage(data, member.clientId);
-        });
-      }
+    const drone = new window.Scaledrone(process.env.REACT_APP_CHANNEL_ID, {
+      data: member,
     });
+    setDrone(drone);
+  }, [member]);
 
-    setDrone(scaledrone);
-
-    return () => {
-      if (scaledrone) {
-        scaledrone.close();
-      }
-    };
-  }, []);
-
-  const handleMessage = (message, clientId) => {
-    const newMessage = {
-      text: message.text,
-      username: message.username,
-      color: message.color,
-      clientId,
-    };
-    setMessages((prevMessages) => [...prevMessages, newMessage]);
-  };
-
-  const sendMessage = (text) => {
+  useEffect(() => {
     if (drone) {
-      drone.publish({
-        room: process.env.REACT_APP_ROOM,
-        message: { username, text, color },
+      drone.on("open", (error) => {
+        if (error) {
+          return console.error(error);
+        }
+        member.id = drone.clientId;
+        console.log("Successfully connected to Scaledrone");
+        setMember(member);
+      });
+      const room = drone.subscribe("observable-room");
+      room.on("data", (data, member) => {
+        setMessages((prevArray) => [...prevArray, { member, text: data }]);
       });
     }
+  }, [drone, member]);
+
+  const onSendMessage = (message) => {
+    drone.publish({
+      room: "observable-room",
+      message,
+    });
   };
 
   return (
     <div className="App">
-      <h1>Chat App</h1>
-      <Messages messages={messages} />
-      <Input sendMessage={sendMessage} />
+      <div className="App-header">
+        <h1>ReactJS Chat</h1>
+      </div>
+      <Messages messages={messages} currentMember={member} />
+      <Input onSendMessage={onSendMessage} />
     </div>
   );
 };
-
 export default App;
